@@ -18,3 +18,16 @@ sessions/*
 
 # Keys
 keys/*.pem
+
+### Debian's .gitignore
+debian/luaflare/
+debian/luaflare-service/
+debian/luaflare-reverseproxy-nginx/
+debian/luaflare-reverseproxy-apache/
+debian/tmp/
+debian/*.log
+debian/*.debhelper
+debian/*.substvars
+debian/files
+packages/
+### End Debian's .gitignore
