@@ -1,3 +1,10 @@
+luaflare (2.7) UNRELEASED; urgency=low
+
+  * More explicit bootstrapping of Lua to LuaFlare's flavour of Lua.
+  * Circular requires are automatically resolved.
+
+ -- Kate Adams <self@kateadams.eu>  Wed, 14 Jan 2015 03:18:52 +0000
+
 luaflare (2.6.25) unstable; urgency=low
 
   * Added slug library, now depends on `unaccent`.
