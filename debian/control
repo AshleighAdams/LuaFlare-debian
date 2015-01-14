@@ -1,0 +1,37 @@
+Source: luaflare
+Section: httpd
+Priority: optional
+Maintainer: Kate Adams <self@kateadams.eu>
+Build-Depends: debhelper (>= 9), dh-systemd (>= 1.5), bash-completion, lua5.2
+Standards-Version: 3.9.6
+Homepage: https://github.com/KateAdams/LuaFlare
+Vcs-Git: https://github.com/KateAdams/LuaFlare-debian
+Vcs-Browser: https://github.com/KateAdams/LuaFlare-debian
+
+Package: luaflare
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}, lua5.2, lua-bitop, lua-socket, lua-posix, lua-filesystem, lua-md5, unaccent
+Recommends: luaflare-reverseproxy, luaflare-service
+Description: Lua web server
+ An entire web server written in Lua
+
+Package: luaflare-service
+Architecture: all
+Depends: ${misc:Depends}, luaflare (= ${source:Version}), sysvinit-utils (>= 2.88dsf-50) | systemd | upstart
+Recommends: lua-systemd
+Description: Lua web server service
+ Daemons for LuaFlare
+
+Package: luaflare-reverseproxy-nginx
+Architecture: all
+Depends: ${misc:Depends}, debconf, luaflare (= ${source:Version}), nginx
+Provides: luaflare-reverseproxy
+Description: Nginx site for LuaFlare
+ Nginx site for reverse proxying LuaFlare
+
+Package: luaflare-reverseproxy-apache
+Architecture: all
+Depends: ${misc:Depends}, luaflare (= ${source:Version}), apache2, libapache2-mod-proxy-html, libapache2-mod-xsendfile
+Provides: luaflare-reverseproxy
+Description: Apache site for LuaFlare
+ Apache site for reverse proxying LuaFlare

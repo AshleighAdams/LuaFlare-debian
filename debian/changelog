@@ -1,0 +1,111 @@
+luaflare (2.6.25) unstable; urgency=low
+
+  * Added slug library, now depends on `unaccent`.
+
+ -- Kate Adams <self@kateadams.eu>  Fri, 09 Jan 2015 15:36:05 +0000
+
+luaflare (2.6.22) unstable; urgency=low
+
+  * Added --disable-expects
+  * Fixed quick_response_client() not using httpstatus.tostring().
+
+ -- Kate Adams <self@kateadams.eu>  Thu, 08 Jan 2015 19:31:51 +0000
+
+luaflare (2.6.10+1) unstable; urgency=low
+
+  * Fixed "luaflare" module version number.
+
+ -- Kate Adams <self@kateadams.eu>  Fri, 02 Jan 2015 23:28:13 +0000
+
+luaflare (2.6.10) unstable; urgency=low
+
+  * Check file exists before sourcing /etc/default/luaflare.
+
+ -- Kate Adams <self@kateadams.eu>  Fri, 02 Jan 2015 23:19:01 +0000
+
+luaflare (2.6.9) unstable; urgency=low
+
+  * LuaFlare loads lib and cfg paths from /etc/default/luaflare.
+
+ -- Kate Adams <self@kateadams.eu>  Fri, 02 Jan 2015 23:12:50 +0000
+
+luaflare (2.6.8) unstable; urgency=low
+
+  * ar_defaulterrors.lua: use httpstatus.tostring().
+
+ -- Kate Adams <self@kateadams.eu>  Tue, 30 Dec 2014 04:28:57 +0000
+
+luaflare (2.6.5) unstable; urgency=low
+
+  * --help: --out-pid now displays =path (for bash completion).
+  * httpstatus: know_statuses renamed to known_statuses.
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 23:09:21 +0000
+
+luaflare (2.6) unstable; urgency=low
+
+  * Sessions: Allow session overriding via the `GetSession` hook.
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 08:54:14 +0000
+
+luaflare (2.5.60) unstable; urgency=low
+
+  * Moved bash completion from /etc into /usr/share
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 07:11:24 +0000
+
+luaflare (2.5.59) unstable; urgency=low
+
+  * added luaflare manpage
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 06:05:03 +0000
+
+luaflare (2.5.57+1) unstable; urgency=low
+
+  * luaflare-reverseproxy-nginx: source the config with confmodule, so
+    that db_* commands are included.
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 02:16:00 +0000
+
+luaflare (2.5.57) unstable; urgency=low
+
+  * Lots of file permission fixes.
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 02:06:10 +0000
+
+luaflare-reverseproxy-apache (2.5.57) unstable; urgency=low
+
+  * Removed VirtualHost directive so that all requests are forwarded
+    to LuaFlare.
+
+ -- Kate Adams <self@kateadams.eu>  Mon, 29 Dec 2014 02:06:10 +0000
+
+luaflare (2.5.52) unstable; urgency=low
+
+  * --trusted-reverse-proxies: can specify an IP mask.
+  * added escape.mysql().
+  * Fixed escape.argument().
+  * Fixed compatibility with Lua 5.1.
+  * Added --keepalive-time.
+
+ -- Kate Adams <self@kateadams.eu>  Sun, 28 Dec 2014 14:39:44 +0000
+
+luaflare (2.5.45) unstable; urgency=low
+
+  * Add group permisions on mounting.
+  * Updated websocket's API.
+  * Unescape library.
+
+ -- Kate Adams <self@kateadams.eu>  Sat, 29 Nov 2014 00:59:40 +0000
+
+luaflare (2.4) unstable; urgency=low
+
+  * LuaServer renamed to LuaFlare
+
+ -- Kate Adams <self@kateadams.eu>  Thu, 20 Nov 2014 17:45:32 +0000
+
+luaflare (2.3) unstable; urgency=low
+
+  * First Debian package
+
+ -- Kate Adams <self@kateadams.eu>  Sat, 15 Nov 2014 17:39:37 +0000

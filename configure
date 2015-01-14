@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cd thirdparty && ./configure --system-service=none --nginx-dir=/etc/nginx --apache-dir=/etc/apache2 --pre-command=echo $@

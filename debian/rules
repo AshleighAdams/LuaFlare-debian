@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+# This has to be exported to make some magic below work.
+export DH_OPTIONS
+
+%:
+	dh $@ --with systemd
+
+override_dh_installinit:
+	dh_installinit --name=luaflare
+
+override_dh_systemd_enable:
+	dh_systemd_enable --name=luaflare
+
+override_dh_installdocs:
+	dh_installman
+	dh_installdocs
+
+override_dh_install:
+	dh_bash-completion
+	dh_install
+	
+	make \
+		DESTDIR="`pwd`/debian/luaflare" \
+		install-bin install-shared install-luaflare-opts
+	cat debian/luaflare.postinst.self >> debian/luaflare.postinst.debhelper
+	
+	make \
+		DESTDIR="`pwd`/debian/luaflare-reverseproxy-nginx" \
+		install-nginx-site
+	cat debian/luaflare-reverseproxy-nginx.postinst.self >> debian/luaflare-reverseproxy-nginx.postinst.debhelper
+	
+	make \
+		DESTDIR="`pwd`/debian/luaflare-reverseproxy-apache" \
+		install-apache-site
+	cat debian/luaflare-reverseproxy-apache.postinst.self >> debian/luaflare-reverseproxy-apache.postinst.debhelper
+	
+override_dh_usrlocal:
+
+override_dh_auto_build:

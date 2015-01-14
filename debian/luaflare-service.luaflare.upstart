@@ -1,0 +1,24 @@
+#!upstart
+description     "Lua web server"
+author          "Kate Adams <self@kateadams.eu>"
+
+# /etc/init/luaflare.conf
+
+# no start option as you might not want it to auto-start
+# This might not be supported - you might need a: start on runlevel [3]
+#stop on runlevel [!2345]
+
+start on runlevel [2345]
+stop on runlevel [016]
+
+
+# if you want it to automatically restart if it crashes, leave the next line in
+respawn
+
+script
+	[ -f "/etc/default/luaflare" ] && . "/etc/default/luaflare"
+	cd /usr/lib/luaflare
+	sudo -u www-data "/usr/bin/luaflare" listen >> /var/log/luaflare.log 2>&1
+end script
+
+# exec start-stop-daemon --start --make-pidfile --pidfile /var/run/luaflare.pid --chuid www-data --exec "/usr/bin/luaflare" listen >> /var/log/luaflare.log 2>&1

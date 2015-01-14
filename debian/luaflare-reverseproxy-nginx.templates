@@ -1,0 +1,15 @@
+Template: luaflare-reverseproxy-nginx/enable
+Type: boolean
+Default: true
+_Description: Enable LuaFlare's reverse proxy (Nginx)?
+ Enabling the Nginx reverse proxy will disable the default Nginx site if it
+ exists to prevent a conflict between bound ports.
+ .
+ You can re-enable this at a later date by recreating the system link
+ `/etc/nginx/sites-enabled/default` to `/etc/nginx/sites-available/default`.
+
+Template: luaflare-reverseproxy-nginx/first
+Type: boolean
+Default: true
+_Description: for internal use
+ This is set to false once it has been configured atleast once.
