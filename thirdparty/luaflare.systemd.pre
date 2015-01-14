@@ -1,0 +1,18 @@
+[Unit]
+Description=Lua web server
+After=network.target
+
+[Service]
+Type=notify
+User=%USER
+EnvironmentFile=%SYSCONF/default/luaflare
+WorkingDirectory=%LUAFLARE_LIB_DIR
+ExecStart=%LUAFLARE_LIB_DIR/luaflare.lua listen --systemd
+KillMode=process
+Restart=always
+WatchdogSec=60
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+

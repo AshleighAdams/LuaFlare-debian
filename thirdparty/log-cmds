@@ -1,0 +1,30 @@
+#!/usr/bin/env lua
+
+local function escape_arg(input)
+	input = input:gsub(" ", "\\ ")	
+	input = input:gsub("'", "\\'")
+	input = input:gsub("\"", "\\\"")
+	input = input:gsub("\n", "\\n")
+	input = input:gsub("\r", "\\r")
+	input = input:gsub("\b", "\\b")
+	input = input:gsub("\t", "\\t")
+	
+	return input
+end
+
+
+local cmd_args = {}
+local file
+for k,v in pairs({...}) do
+	if k == 1 then
+		file = v
+	else
+		table.insert(cmd_args, escape_arg(v))
+	end
+end
+
+assert(file)
+
+local f = assert(io.open(file, "a"))
+f:write(table.concat(cmd_args, " ") .. "\n")
+f:close()

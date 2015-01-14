@@ -1,0 +1,350 @@
+#!/usr/bin/env lua
+
+local prefix, sysconf
+
+local vars = {}
+local function set_var(key, value)
+	vars[key] = value
+end
+
+local function get_var(key)
+	return vars[key]
+end
+
+local function escape_pattern(i)
+	return (i:gsub("[%-%+%(%)%[%]%.%?]", "%%%1"))
+end
+
+local function escape_gsub(i)
+	return (i:gsub("%%", "%%%%"))
+end
+
+local paths
+local function find_program(name, shoulderror)
+	if not paths then
+		paths = {}
+		
+		local path_env = os.getenv("PATH"):gsub("([^:]+)", function(path)
+			table.insert(paths, path .. "/?")
+			if path:sub(-4) == "/bin" then
+				table.insert(paths, path:sub(1, -5) .. "/sbin/?")
+			end
+		end)
+	end
+	
+	io.stdout:write("locating " .. name .. "... ")
+	name = escape_gsub(name)
+	
+	for k,path in ipairs(paths) do
+		path = path:gsub("%?", name)
+		local got = io.open(path, "r")
+		
+		if got then
+			got:close()
+			print("okay: " .. path)
+			return path
+		end
+	end
+	
+	if shoulderror == nil or shoulderror == true then
+		print("error: not found")
+		os.exit(1)
+	else
+		print("not found")
+	end
+	
+	return nil
+end
+
+local function find_arg(name, default)
+	name = escape_pattern(name)
+	local patt = string.format("%%-%%-%s=(.+)", name)
+	for k,v in pairs(arg) do
+		local found = v:match(patt) or (v:match("%-%-" .. name) and "" or nil)
+		if found then return found end
+	end
+	
+	return default
+end
+
+
+local function set_prefix()
+	prefix = find_arg("prefix", "/usr")
+	sysconf = find_arg("sysconfig", "/etc")
+	print("prefix: " .. prefix)
+	print("sysconf: " .. sysconf)
+	set_var("PREFIX", prefix)
+	set_var("SYSCONF", sysconf)
+end
+
+local function set_lua()
+	local v = find_arg("lua", "lua")
+	set_var("LUA", v)
+end
+
+
+local function set_tools()
+	local pre = find_arg("pre-command", "")
+	set_var("precmd", pre)
+	
+	for k,tool in ipairs(tools) do
+		local path = find_program(tool)
+		tool = tool:gsub("[^A-Za-z0-9]", "")
+		
+		set_var(tool, path)
+	end
+end
+
+local function set_user()
+	local user = find_arg("user", "www-data")
+	
+	print("user: " .. user)
+	set_var("USER", user)
+end
+
+local function set_nginx()
+	if find_arg("no-nginx") then return end
+	
+	local location = find_arg("nginx-dir")
+	if not location then
+		-- make sure they have nginx installed
+		local nginx = find_program("nginx", false)
+		if not nginx then return end -- no nginx installed
+		
+		local proc = io.popen(nginx.." -V 2> /dev/stdout")
+		local output = proc:read("*a")
+		proc:close()
+	
+		location = output:match("%-%-conf%-path=(.-)/nginx%.conf")
+		if not location then
+			print("could not locate nginx's configuration path")
+			os.exit(1)
+		end
+	end
+	
+	print("nginx dir: " .. location)
+	set_var("NGINX_DIR", location)
+	
+	local http_port = find_arg("nginx-http-port", "80")
+	local https_port = find_arg("nginx-https-port", "443")
+	
+	print("nginx http/https ports: " .. http_port .. " & " .. https_port)
+	
+	set_var("NGINX_HTTP_PORT", http_port)
+	set_var("NGINX_HTTPS_PORT", https_port)
+	table.insert(install, "install-nginx-site")
+	
+	reverse_proxy = reverse_proxy or {}
+	reverse_proxy.nginx = true
+end
+
+local function set_apache()
+	if find_arg("no-apache") then return end
+	
+	local location = find_arg("apache-dir")
+	if not location then
+		local apache = find_program("apache", false)
+		if not apache then return end
+	end
+	
+	print("apache dir: " .. location)
+	set_var("APACHE_DIR", location)
+	
+	local http_port = find_arg("apache-http-port", "80")
+	local https_port = find_arg("apache-https-port", "443")
+	
+	set_var("APACHE_HTTP_PORT", http_port)
+	set_var("APACHE_HTTPS_PORT", https_port)	
+	table.insert(install, "install-apache-site")
+	
+	reverse_proxy = reverse_proxy or {}
+	reverse_proxy.apache = true
+end
+
+local function set_system_service()
+	local system_service
+	
+	if find_arg("system-service") then
+		system_service = find_arg("system-service")
+	elseif find_program("systemd", false) then
+		system_service = "systemd"
+	elseif find_program("initctl", false) then
+		system_service = "upstart" -- "upstart" -- upstart not complete, fall back to sysvinit
+	elseif find_program("init", false) then
+		system_service = "sysvinit"
+	else
+		print("no system service manager found, will not install system daemon")
+		return
+	end
+	
+	print("system service: " .. system_service)
+	set_var("SERVICE", system_service)
+	table.insert(install, "install-" .. system_service .. "-service")
+	
+	set_var("SYSTEMD_UNIT_DIR",    "")
+	set_var("SYSVINIT_DAEMON_DIR", "")
+	set_var("UPSTART_DAEMON_DIR",  "")
+	
+	if system_service == "systemd" then
+		local unit_path = find_arg("systemd-unit-path") -- local probably: /etc/systemd/system; package probably: /lib/systemd/system
+		
+		if not unit_path then
+			local systemctl = io.popen(find_program("systemctl") .. " show")
+			local output = systemctl:read("*a")
+			systemctl:close()
+			
+			unit_path = output:match("UnitPath=(.-)%s")
+		end
+		
+		print("systemd unit path: " .. unit_path)
+		set_var("SYSTEMD_UNIT_DIR", unit_path)
+		
+		table.insert(tools, "systemctl")
+		table.insert(lua_depends, "systemd.daemon")
+	elseif system_service == "sysvinit" then
+		set_var("SYSVINIT_DAEMON_DIR", "/etc/init.d")
+	elseif system_service == "upstart" then
+		set_var("UPSTART_DAEMON_DIR", "/etc/init")
+	end
+end
+
+local function set_bash_dir()
+	local path = find_arg("bashcompletion-dir", prefix .. "/share/bash-completion/completions/")
+	
+	if not path then
+		return print("bash completion path not found")
+	end
+	table.insert(install, "install-bash-completion")
+	
+	print("bash completion dir: " .. path)
+	set_var("BASH_COMPLETION_DIR", path)
+end
+
+local function set_luaflare_postinst_opts()
+	local opts = {}
+	local ls_port = find_arg("luaflare-port")
+	
+	if not ls_port and reverse_proxy then
+		ls_port = 8080
+	elseif not ls_port then
+		ls_port = 8080 -- still, for now, use 8080 as we don't need to be privlidged
+	end
+	table.insert(opts, string.format("--port=%d", ls_port))
+	set_var("LUAFLARE_PORT", ls_port)
+	
+	if reverse_proxy then
+		table.insert(opts, "--reverse-proxy")
+		table.insert(opts, "--local")
+		table.insert(opts, "--trusted-reverse-proxies=localhost,::1")
+		if reverse_proxy.nginx then
+			table.insert(opts, "--x-accel-redirect=/./")
+		end
+		if reverse_proxy.apache then
+			table.insert(opts, "--x-sendfile")
+		end
+	end
+	
+	local stropts = table.concat(opts, " ")
+	print("luaflare post-install options: " .. stropts)
+	
+	set_var("LUAFLARE_POSTINT_OPTS", stropts)
+	table.insert(install, "install-luaflare-opts")
+end
+
+local function set_luaflare_vars()
+	set_var("LUA_DEPENDS", table.concat(lua_depends, " "))
+	set_var("INSTALL_EXTRA", table.concat(install, " "))
+	
+	set_var("LUAFLARE_LIB_DIR", prefix .. "/lib/luaflare")
+	set_var("LUAFLARE_BIN_DIR", prefix .. "/bin")
+	set_var("LUAFLARE_CFG_DIR", sysconf .. "/luaflare")
+	
+	local git = io.popen(get_var("git") .. " describe --tags --always")
+	local git_version = git:read("*l")
+	git:close()
+	
+	local nice_version = git_version:match("[0-9%.%-]+[0-9]"):gsub("%-", ".")
+	
+	set_var("CONFIGURE_VERSION", git_version)
+	set_var("VERSION", nice_version)
+end
+
+local function process_file(file)
+	local out = file:sub(1, -5) .. ".post"
+
+	local f = io.open(file, "r")
+	local of =  io.open(out, "w")
+
+	local contents = f:read("*a")
+	f:close()
+	
+	contents = contents:gsub("%%([A-Za-z_][A-Za-z0-9_]+)", function(name)
+		local ret = vars[name]
+		if not ret then
+			print(file .. ": warning: unusued variable %" .. name)
+			return ""
+		end
+		return ret
+	end)
+	contents = contents:gsub("%%%%", "%%")
+	
+	of:write(contents)
+	of:close()
+	
+	os.execute(string.format("chmod --reference \"%s\" \"%s\"", file, out))
+end
+
+local function process_files()
+	print("processing files...")
+	local p = io.popen("ls *.pre")
+	while true do
+		local f = p:read("*l")
+		if not f then break end
+		
+		io.stdout:write("processing " .. f .. "...")
+		
+		local oldprint = print
+		local printqueue = {}
+		function print(...)
+			table.insert(printqueue, table.pack(...))
+		end
+		
+		process_file(f)
+		
+		oldprint(" done.")
+		print = oldprint
+		for k,v in ipairs(printqueue) do
+			print(table.unpack(v))
+		end
+	end
+	p:close()
+end
+
+install = {}
+lua_depends = {"bit", "lfs", "md5", "posix", "socket"}
+tools = {"cp", "mkdir", "cat", "sed", "ln", "git", "chmod", "chown", "service", "update-rc.d", "install", "touch"}
+
+set_prefix()
+set_lua()
+set_user()
+set_nginx()
+set_apache()
+set_system_service()
+set_bash_dir()
+set_luaflare_postinst_opts()
+set_tools()
+set_luaflare_vars()
+
+process_files()
+
+print("configuring complete\nvariables:")
+
+local vars_sorted = {}
+for k,v in pairs(vars) do
+	table.insert(vars_sorted, {name = k, value = v})
+end
+table.sort(vars_sorted, function(a, b) return a.name < b.name end)
+for k,v in pairs(vars_sorted) do
+	print("", v.name .. " = " .. v.value)
+end
+

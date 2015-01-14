@@ -1,0 +1,20 @@
+tmp/
+Binaries/
+Projects/
+*~
+log.txt
+build.zip
+*.secret
+*.userprefs
+# for buildserver
+sites/buildserver/build_files/
+sites/buildserver/static/*/build/*
+sites/buildserver/static/*/build/LuaFlare2.zip
+sites/tty
+sites/kateadams.eu/
+
+# Sessions
+sessions/*
+
+# Keys
+keys/*.pem
