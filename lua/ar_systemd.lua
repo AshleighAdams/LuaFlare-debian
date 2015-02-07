@@ -22,12 +22,12 @@ local function systemd_notify()
 				local delay = interval / 2
 				while true do
 					daemon.kick_dog()
-					coroutine.yield(delay)
+					scheduler.sleep(delay)
 				end
 			end
 		
 			scheduler.newtask("systemd heartbeat", heartbeat)
-			print("systemd heartbeat beating")
+			print("systemd heart beating")
 		end
 	end
 	
@@ -36,7 +36,7 @@ local function systemd_notify()
 		local function on_warning(msg, opts)
 			opts.silence = true -- don't output this message to stderr!
 			local priority = opts.fatal and journal.LOG.ERROR or journal.LOG.WARNING
-			journal.print(priority, msg)
+			journal.print(priority, "%s", msg)
 		end
 		hook.add("Warning", "warning to journal", on_warning)
 		
@@ -59,4 +59,4 @@ local function systemd_notify()
 end
 
 -- priority is 2, therefore
-hook.add("Loaded", "notify systemd", systemd_notify, 2)
+hook.add("Load", "notify systemd", systemd_notify, 2)

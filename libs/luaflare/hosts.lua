@@ -5,24 +5,19 @@ hosts.host_meta = {}
 hosts.host_meta.__index = hosts.host_meta
 
 local hook = require("luaflare.hook")
+local escape = require("luaflare.util.escape")
 
 local function generate_host_patern(what) -- TODO: use pattern_escape, can't replace the *
-	local pattern = what
+	local pattern = escape.pattern(what)
 	
-	-- TODO: should these even be here? other than the . and * replacement
-	pattern = string.gsub(pattern, "%%", "%%%") -- this must be first...	
-	pattern = string.gsub(pattern, "%.", "%%.") -- escape them
-	pattern = string.gsub(pattern, "%(", "%%(")
-	pattern = string.gsub(pattern, "%)", "%%)")
-	pattern = string.gsub(pattern, "%+", "%%+")
-
-	-- now, allow things like *domain.net, or *.domain.net, *domain.net*
-	pattern = string.gsub(pattern, "*", ".+")
+	pattern = string.gsub(pattern, "%%%*", ".*")
+	pattern = string.gsub(pattern, "%%%~", ".+")
+	pattern = string.gsub(pattern, "%%%+", "[^%%.]+")
 	
 	return "^" .. pattern .. "$"
 end
 local function generate_resource_patern(string pattern)
-	pattern = string.gsub(pattern, "*", "[%%w%%s!-.:-@%%%%%%]%%[-\xff]-")
+	pattern = string.gsub(pattern, "*", "[^/]*")
 	return "^" .. pattern .. "$"
 end
 
@@ -31,6 +26,7 @@ function hosts.get(string host, options)
 	if hosts.hosts[host] then return hosts.hosts[host] end
 	local obj = setmetatable({
 		pattern = generate_host_patern(host),
+		host = host,
 		pages = {},
 		page_patterns = {},
 		options = options
@@ -41,6 +37,10 @@ function hosts.get(string host, options)
 end
 
 function hosts.match(string host)
+	-- so the pattern "*.domain.com" matches "domain.com"
+	-- note that "+.domain.com" does not match "domain.com"
+	host = "." .. host
+	
 	local hits = {}
 	
 	for k,v in pairs(hosts.hosts) do
@@ -58,50 +58,104 @@ function hosts.match(string host)
 	else
 		local err
 		
-		if #hits == 2 then
-			err = "Host conflict between: " .. table.concat(hits, " and ")
-		else
-			err = "Host conflict between: " .. table.concat(hits, ", "):gsub(", (.-)$", ", and %1")
+		local conflicts = {}
+		for k,v in ipairs(hits) do
+			conflicts[k] = v.host
 		end
 		
-		return nil, err
+		if #hits == 2 then
+			err = "Host conflict between: " .. table.concat(conflicts, " and ")
+		else
+			err = "Host conflict between: " .. table.concat(conflicts, ", "):gsub(", (.-)$", ", and %1")
+		end
+		
+		return nil, 500, err
 	end
 end
 
-function hosts.host_meta::addpattern(string pattern, function callback)
+function hosts.host_meta::addpattern(string pattern, function callback, string method = "GET")
 	local page = {
 		pattern = generate_resource_patern(pattern),
 		original_pattern = pattern,
-		callback = callback
+		callback = callback,
+		method = method
 	}
 	self.page_patterns[pattern] = page
 end
 
-function hosts.host_meta::add(string url, function callback)
+function hosts.host_meta::add(string url, function callback, string method = "GET")
+	local page_root = self.pages[url]
+	if not page_root then
+		page_root = {}
+		self.pages[url] = page_root
+	end
+
 	local page = {
 		url = url,
-		callback = callback
+		callback = callback,
+		method = method
 	}
-	self.pages[url] = page
+	
+	page_root[method] = page
 end
 
-function hosts.host_meta::match(string url)
+hosts.method_synoms = {
+	HEAD = {
+		GET = true
+	}
+}
+
+function hosts.host_meta::match(string path, string method = "GET")
 	local hits = {}
 	
-	if self.pages[url] then -- should we test against patterns too?
-		table.insert(hits, {page = self.pages[url], args = {url}})
+	if self.pages[path] then -- should we test against patterns too?
+		for k,v in pairs(self.pages[path]) do
+			table.insert(hits, {page = v, args = {path}})
+		end
 	end
 	
 	for k,page in pairs(self.page_patterns) do
-		local args = table.pack(url:match(page.pattern))
+		local args = table.pack(path:match(page.pattern))
 		if #args ~= 0 then
 			table.insert(hits, {page = page, args = args})
 		end
 	end
 	
-	if #hits == 0 then
+	local hits_count = #hits
+	
+	-- let's test the methods
+	if hits_count ~= 0 then
+		local methods = {}
+		for i = #hits, 1 do
+			local hit = hits[i]
+			local page = hit.page
+			
+			-- update the list of valid methods
+			if not methods[page.method] then
+				methods[page.method] = true
+				table.insert(methods, page.method)
+			end
+			
+			-- we don't want other methods in the list...
+			if method ~= page.method then
+				local synoms = hosts.method_synoms[method]
+				if not synoms or not synoms[page.method] then
+					table.remove(hits, i)
+				end
+			end
+		end
+		-- update this var, and if we no longer have a match, throw an error
+		hits_count = #hits
+		
+		if hits_count == 0 then
+			local valid_methods = table.concat(methods, ", ")
+			return nil, nil, 405, string.format("The method %s is not valid for this resource.  Valid methods are: %s.", method, valid_methods), {Allow = valid_methods}
+		end
+	end
+	
+	if hits_count == 0 then
 		return nil, nil, 404
-	elseif #hits == 1 then
+	elseif hits_count == 1 then
 		return hits[1].page, hits[1].args
 	else
 		local function func_string(func) expects("function")
@@ -117,9 +171,9 @@ function hosts.host_meta::match(string url)
 		end
 		
 		local lines = table.concat(lines, "\n")
-		warn(lines)
+		warn("%s", lines)
 		
-		return nil, nil, 409, lines
+		return nil, nil, 500, lines
 	end
 end
 
@@ -148,22 +202,31 @@ function hosts.process_request(req, res)
 	-- check to see if we should upgrade, and if we did, return
 	if hosts.upgrade_request(req, res) then return end
 	
-	local host, err = hosts.match(req:host())
+	local host, errcode, errstr = hosts.match(req:host())
 	if not host then -- conflict between hosts
-		warn(err)
-		return res:halt(409, err)
+		warn(errstr)
+		res:halt(errcode, errstr)
+		return
 	end
 	
-	local page, args, errcode, errstr = host:match(req:url())
+	local page, args, errcode, errstr, headers = host:match(req:path(), req:method())
 	
 	-- failed, try wildcard
 	if not page and errcode == 404 and (not host.options or not host.options.no_fallback) then
-		page, args, errcode, errstr = hosts.any:match(req:url())
+		page, args, errcode, errstr, headers = hosts.any:match(req:path(), req:method())
+	end
+	
+	
+	if headers then
+		for k,v in pairs(headers) do
+			res:set_header(k, v)
+		end
 	end
 	
 	if not page then
 		assert(errcode)
-		return res:halt(errcode, errstr)
+		res:halt(errcode, errstr)
+		return
 	end
 	
 	page.callback(req, res, table.unpack(args))

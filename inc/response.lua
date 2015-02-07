@@ -1,8 +1,10 @@
 local luaflare = require("luaflare")
-local canon = require("luaflare.util.canonicalize-header")
+local hook = require("luaflare.hook")
 local mimetypes = require("luaflare.mimetypes")
 local httpstatus = require("luaflare.httpstatus")
 local script = require("luaflare.util.script")
+local canon = require("luaflare.util.canonicalize-header")
+
 local md5 = require("md5")
 local lfs = require("lfs")
 
@@ -17,7 +19,7 @@ function Response(request)
 		_reply_len = 0,
 		_headers = {},
 		_request = request,
-		_client = request:client()
+		_socket = request:socket()
 	}
 	setmetatable(ret, meta)
 	
@@ -33,12 +35,18 @@ function meta::request()
 end
 
 function meta::client()
-	return self._client
+	error(":client() deprecated, use :socket()", 2)
+end
+function meta::socket()
+	return self._socket
 end
 
 function meta::set_status(number what)
-	assert(self and what)
 	self._status = what
+end
+
+function meta::status()
+	return self._status
 end
 
 function meta::set_reply(string str)
@@ -51,6 +59,8 @@ function meta::append(string str)
 	self._reply_cache = nil
 	table.insert(self._reply, str)
 	self._reply_len = self._reply_len + str:len()
+	
+	return self
 end
 
 function meta::reply()
@@ -139,7 +149,6 @@ function meta::set_file(string path, options)-- expects(meta, "string")
 				local from, to = string.match(headers.Range, "bytes=(%d+)-(%d*)")
 				local len = reply:len()
 				
-				print("client wants range " .. from .. " to " .. tostring(to))
 				from = tonumber(from) or 0
 				to = tonumber(to) or len - 1
 				
@@ -263,11 +272,19 @@ function meta::send()
 	end
 	tosend = tosend .. "\r\n" .. self:reply()
 	
-	local client = self:client()
-	client:settimeout(-1)
+	local socket = self:socket()
+	socket:write(tosend)
 	
-	client:send(tosend)
-	
-	self._client = nil -- prevent circular recusion? i duno if not doing this will mem leak
+	self._socket = nil -- prevent circular recusion? i duno if not doing this will mem leak
 	self._request = nil -- doesn't harm us not to...
+end
+
+function meta::__tostring()
+	if self._tostr then
+		return self._tostr
+	else
+		local str = string.format("response: %s %s", self:request():peer(), self:request():path())
+		self._tostr = str
+		return str
+	end
 end

@@ -24,9 +24,11 @@ Returns the raw post data sent with this request.
 
 Returns a table of headers.
 
-## `string request:url()`
+## `string request:path()`
 
-Returns the URL, without any query string.
+Returns the path, without any query string.
+
+The path returned **must** be absolute, and without any special meanings, such as, "." (current directory) and ".." (parent directory).
 
 ## `string request:full_url()`
 
@@ -77,6 +79,14 @@ Returns true if this request has been upgraded to another type of connection.
 
 ## `request:set_upgraded()`
 
-Tell the request that it has been upgraded.
+Tell the request that it has been upgraded.  Also disowns the underlying socket.
 
 Once this has been called, LuaFlare *forgets* about this connection (does not close it).  As well as avoiding to keep the connection alive (`Connection: keep-alive`).
+
+## `boolean request:owns_socket()`
+
+Whether or not LuaFlare is considered to be the owner of the underlying socket, such as, it has not been upgraded, and can be used for further HTTP requests.
+
+## `request:disown_socket()`
+
+Disown the socket, will be completely ignored by LuaFlare.

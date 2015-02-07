@@ -33,7 +33,7 @@ Removes all values from a table.
 
 Returns whether or not the table is empty.
 
-## `boolean table.has_key(table t, any key)
+## `boolean table.has_key(table t, any key)`
 
 Checks to see if `t` has a key-value pair with the key of `key`.
 
@@ -63,9 +63,9 @@ Replace the last occurrence of `what` with `with` in `in`.
 
 TODO: remove this
 
-## `string string.trim(string in)`
+## `string string.trim(string in, string chars = " \t\n\r")`
 
-Returns `in` without any white space padding.
+Returns `in`, removing any characters on the edges.
 
 ## `table string.split(string in, string delimiter[, table options])`
 

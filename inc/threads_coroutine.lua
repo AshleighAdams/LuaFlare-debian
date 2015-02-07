@@ -1,6 +1,8 @@
 local threadpool = require("luaflare.threadpool")
 local scheduler = require("luaflare.scheduler")
 local hook = require("luaflare.hook")
+local script = require("luaflare.util.script")
+local reload_time = script.options["reload-time"] or 5
 
 -- detours shit to coroutinify it
 routines = routines or {}
@@ -163,12 +165,14 @@ function main_loop()
 	local tp = threadpool.create(threads, callback)
 	
 	-- loaded now, call the hook
-	hook.call("Loaded")
+	hook.call("Load")
+	local next_reloadscripts = util.time()
+	local max_wait = 0.5
 	
 	while true do
 		if tp:done() then
 			-- we can block on accept() for this long...
-			server:settimeout(scheduler.idletime())
+			server:settimeout(math.min(max_wait, scheduler.idletime()))
 		else
 			server:settimeout(0)
 		end
@@ -176,8 +180,9 @@ function main_loop()
 		--print("accept", tp:done(), scheduler.idletime())
 		local client = server:accept()
 		
-		if not script.options["no-reload"] then
+		if not script.options["no-reload"] and util.time() > next_reloadscripts then
 			hook.safe_call("ReloadScripts")
+			next_reloadscripts = util.time() + reload_time
 		end
 		
 		if client then tp:enqueue(client) end

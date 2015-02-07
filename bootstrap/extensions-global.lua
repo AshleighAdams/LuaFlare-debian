@@ -8,8 +8,9 @@ local function check_expects_disabled()
 	if not script.options["disable-expects"] then return end
 	
 	expects = function() end
+	expects_check = function() end
 end
-hook.add("Loaded", "expects: --disable-expects", check_expects_disabled)
+hook.add("Load", "expects: --disable-expects", check_expects_disabled)
 
 G.expects_types = {}
 G.expects_types.vector = function(what) -- example
@@ -28,16 +29,18 @@ G.expects_types.character = function(what)
 end
 
 -- duck typing check
-local function metatable_compatible(base, value)
+function metatable_compatible(base, value)
 	if value == nil then return false, "is nil" end
-	--if base == getmetatable(value) then return true end
+	
+	-- if they're the same, all is good
+	if base == getmetatable(value) then return true end
 	
 	-- MAYBE: Ignore ignore __index, __newindex, and __call?
 	for k,v in pairs(base) do
 		if type(v) == "function" then
 			local func = value[k]
 			if not func or type(func) ~= "function" then
-				return false, string.format("function %s not found", k)
+				return false, string.format("function missing: %s", k)
 			end
 		end
 	end
@@ -59,7 +62,7 @@ function G.expects(...)
 			error("too many arguments to expects", level)
 		end
 		
-		
+		-- i could call expects_check, but let's leave this here as it won't introduce another call depth
 		if arg == nil then -- anything
 		elseif type(arg) == "table" then
 			local valid, reason = metatable_compatible(arg, val)
@@ -81,6 +84,32 @@ function G.expects(...)
 			if type(val) ~= args[i] then
 				error(string.format("argument #%i (%s) expected %s (got %s)", i, name, arg, type(val)), err_level) -- 3 = caller's caller
 			end
+		end
+	end
+end
+
+-- compared to expects(): 70% quicker in lua5.2, luajit: 270% quicker
+function G.expects_check(arg, name, val, i)
+	if arg == nil then -- anything
+	elseif arg == "any" then -- anything but nil
+		if val == nil then
+			error(string.format("argument #%i (%s) expected a value (got nil)", i, name), 3)
+		end
+	elseif expects_types[arg] then
+		local good, err = expects_types[arg](val)
+		if not good then
+			error(string.format("argument #%i (%s) expected %s (%s)", i, name, arg, err), 3)
+		end
+	elseif type(arg) == "table" then
+		local valid, reason = metatable_compatible(arg, val)
+		if not valid then
+			error(string.format("argument #%i (%s): incompatible (%s)", i, name, reason), 3)
+		end
+	elseif arg == "*" then
+		error("expects(): \"*\" DEPRICATED!")
+	else
+		if type(val) ~= arg then
+			error(string.format("argument #%i (%s) expected %s (got %s)", i, name, arg, type(val)), 3) -- 3 = caller's caller
 		end
 	end
 end

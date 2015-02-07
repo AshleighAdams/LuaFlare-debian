@@ -1,5 +1,21 @@
 #!/usr/bin/env lua
 
+--[[
+
+Concept for this:
+
+Title: LuaFlare Documentation
+SubTitle: $(git describe --tags --always | grep -Eo ".+\-[0-9]+" | tr - .)
+Author: 
+Include: docs/command-line-arguments.md
+Include: docs/install-debian.md
+Include: docs/internal-workings.md
+Include: docs/bootstrap.md
+# *'s don't match files inserted in either before or after (via exact matches)
+Include: docs/*.md
+
+]]
+
 local lfs = require("lfs")
 
 local source = {} -- buffer, will be concat'ed
@@ -91,6 +107,7 @@ if arg[1] == "pdf" or arg[1] == "tex" then
 	\titlespacing*{\paragraph}
 	{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
 
+	\usepackage[UKenglish]{isodate}
 
 	\usepackage{geometry}
 	\geometry{a4paper, margin=1in}
@@ -102,6 +119,13 @@ if arg[1] == "pdf" or arg[1] == "tex" then
 		basicstyle=\ttfamily,
 		literate={--}{{-\,-}}1,
 		literate={-}{{-}}1,
+	}
+
+	\hypersetup{
+		pdffitwindow=false,
+		pdftitle={LuaFlare Documentation},
+		pdfnewwindow=true,
+		colorlinks=false,
 	}
 
 	\usepackage{titling}
@@ -116,7 +140,7 @@ if arg[1] == "pdf" or arg[1] == "tex" then
 	\title{LuaFlare Documentation}
 	\subtitle{]]..version..[[}
 	\usepackage{graphicx}
-
+	\sloppy %% so that some \texttt's wrap
 	\begin{document}
 
 	\maketitle
@@ -171,6 +195,28 @@ elseif arg[1] == "epub" then
 	os.execute[[unzip tmp/luaflare-documentation.epub -d tmp/docs]]
 	os.execute[[sed -i "s/\"-/\"/g" tmp/docs/*.*]]
 	os.execute[[sed -i "s/#-/#/g" tmp/docs/*.*]]
+	
+	-- modify the stylesheet
+	print("fixing stylesheet...")
+	local ss = assert(io.open("tmp/docs/stylesheet.css", "r"))
+	local ss_c = ss:read("*a") ss:close()
+	ss = assert(io.open("tmp/docs/stylesheet.css", "w"))
+	
+	ss:write(ss_c .. [[
+h1, h2, h3, h4, h5, h6 {
+	text-align: left;
+	text-indent: -1em;
+	padding-left: 1em;
+}
+code {
+	text-align: left;
+}
+p {
+	text-align: justify;
+}
+]])
+	ss:flush()
+	ss:close()
 	
 	-- images become corrupted with unzip for some reason, so replace them with the originals...
 	os.execute[[cp cover.png tmp/docs/cover.png]]

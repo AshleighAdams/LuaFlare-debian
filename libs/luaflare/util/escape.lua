@@ -2,6 +2,8 @@ local escape = {}
 
 local url = require("socket.url")
 local xssfilter = require("xssfilter")
+local script = require("luaflare.util.script")
+local hook = require("luaflare.hook")
 
 --# luarocks install xssfilter
 -- And until luarocks supports lua 5.2:
@@ -9,44 +11,46 @@ local xssfilter = require("xssfilter")
 
 local xss_filter = xssfilter.new({})
 
-function escape.pattern(input) expects "string" -- defo do not use string.Replace, else revusion err	
+function escape.pattern(string input)
 	return (string.gsub(input, "[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1"))
 end
 
-local http_safe = {}
 local http_replacements = {}
 
 for i = 32, 126 do
-	http_safe[string.char(i)] = true
+	http_replacements[string.char(i)] = string.char(i)
 end
-http_safe['"'] = nil
-http_safe["'"] = nil
-http_safe["<"] = nil
-http_safe[">"] = nil
-http_safe["&"] = nil
-http_safe["\t"] = true
-http_safe["\n"] = true
-http_safe["\r"] = true
-
 http_replacements["&"] = "&amp;"
 http_replacements['"'] = "&quot;"
 http_replacements["'"] = "&apos;"
 http_replacements["<"] = "&lt;"
 http_replacements[">"] = "&gt;"
+http_replacements["\n"] = "\n"
+http_replacements["\r"] = "\r"
+http_replacements["\t"] = "\t"
 
-local function http_safechar(char)
-	if http_safe[char] then
-		return char
-	elseif http_replacements[char] then
-		return http_replacements[char]
-	else
-		return string.format("&#%d;", string.byte(char))
-	end
+local warn_bucket_size = 1024
+local function set_bucket_size()
+	warn_bucket_size = tonumber(script.options["escape-html-warn-buckets"]) or 1024
 end
+hook.add("Load", "--escape-html-warn-buckets", set_bucket_size)
 
-function escape.html(input, strict) expects "string"
-	if strict == nil then strict = true end
-	input = input:gsub(".", http_safechar)
+setmetatable(http_replacements, {
+	__index = function(self, k)
+		local c = string.format("&#%d;", string.byte(k))
+		http_replacements[k] = c
+		
+		local bc = table.count(http_replacements)
+		
+		if bc >= warn_bucket_size then
+			warn("escape.html() bucket size: %d", bc)
+		end
+		return c
+	end
+})
+
+function escape.html(string input, boolean strict = true)
+	input = input:gsub(".", http_replacements)
 	
 	if strict then
 		input = input:gsub("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")
@@ -56,11 +60,11 @@ function escape.html(input, strict) expects "string"
 end
 escape.attribute = escape.html
 
-function escape.url(input) expects "string"
+function escape.url(string input)
 	return url.escape(input)
 end
 
-function escape.striptags(input, tbl) expects "string"
+function escape.striptags(string input, tbl)
 	local html, message = xss_filter:filter(input)
 	
 	if html then
@@ -71,14 +75,14 @@ function escape.striptags(input, tbl) expects "string"
 	error("what?")
 end
 
-function escape.sql(input) expects "string"	
+function escape.sql(string input)
 	input = input:gsub("'", "''")
 	input = input:gsub("\"", "\"\"")
 	
 	return input
 end
 
-function escape.mysql(input) expects "string"	
+function escape.mysql(string input)
 	--[[
 		 NUL (0x00) --> \0  [This is a zero, not the letter O]
 		 BS  (0x08) --> \b
@@ -106,8 +110,8 @@ function escape.mysql(input) expects "string"
 	return input
 end
 
-function escape.argument(input, quoteify) expects "string"
-	if quoteify == nil or quoteify then
+function escape.argument(string input, boolean quoteify = true)
+	if quoteify then
 		input = input:gsub("`", "\\`")
 		input = input:gsub("$", "\\$")
 		input = input:gsub("\"", "\\\"")

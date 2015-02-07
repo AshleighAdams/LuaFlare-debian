@@ -1,4 +1,4 @@
-# Command Line Arguments & Options
+# Command Line Arguments, Options, & Environment Variables
 
 ## Arguments
 
@@ -124,7 +124,7 @@ Upon startup completion, write our PID to `path`.
 
 ### `--keepalive-time`
 
-Maximium number of seconds a connection may be kept alive (default is `2`).
+Maximum number of seconds a connection may be kept alive (default is `2`).
 
 ### `--session-tmp-dir=path`
 
@@ -133,3 +133,35 @@ Where to store session (textfiles) files (default: /tmp/luaflare-sessions-XXXXXX
 ### `--disable-expects`
 
 Disable type checking for performance.
+
+### `--socket-backend=string`
+
+The backend to use for sockets (default is "luasocket").
+
+### `--escape-html-warn-buckets=number`
+
+Warn when this many buckets exist for escaping HTML strings (default 1024).
+
+## Environment Variables
+
+Environment variables may be set either before you call `luaflare` (such as `NAME="value" luaflare ...`),
+or by placing them inside of `/etc/default/luaflare` -- which is loaded automatically,
+both by `/usr/bin/luaflare` or their daemon scripts.
+
+The following environment variables are recognized by LuaFlare.
+
+### `BOOTSTRAP_LOG`
+
+Should we write the bootstrap log to stdout?  Defaults to 0.
+
+### `LUAFLARE_HOOK_PERFCOUNT_DISABLE`
+
+Set this to 1 to disable the hook performance counter.
+
+### `LUAFLARE_CFG_DIR`
+
+Points to where the LuaFlare configuration directory is.  Will usually be "/etc/luaflare" or ".".
+
+### `LUAFLARE_LIB_DIR`
+
+Points to where the LuaFlare library directory is.  Will usually be "/usr/lib/luaflare" or ".".

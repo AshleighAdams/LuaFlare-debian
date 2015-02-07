@@ -1,30 +1,12 @@
-#!/usr/bin/env lua
-
--- try to bootstrap
-do -- for require() to check modules path
-	local tp, tcp = package.path, package.cpath
-	
-	local path = os.getenv("LUAFLARE_LIB_DIR") or arg[0]:match("(.+)/") or "."
-	
-	package.path = path .. "/libs/?.lua;" .. tp
-	package.cpath = path .. "/libs/?.so;" .. tcp
-	
-	local bootstrap, err = loadfile(path.."/bootstrap/bootstrap.lua")
-	if not bootstrap then
-		io.stderr:write("failed to bootstrap: "..tostring(err).."\n")
-		os.exit(1)
-	end
-	bootstrap{path=path}
-end
-
-local luaflare = require("luaflare")
+#!/usr/bin/lua
 
 local function usage()
-	print([[
+	io.stdout:write([[
 usage:
     luaflare listen [OPTIONS]...
     luaflare mount PATH NAME
     luaflare unmount NAME
+    luaflare unit-test
     luaflare [OPTIONS]...
 
 --port=number                     Port to bind to (default 8080).
@@ -63,11 +45,33 @@ usage:
 --session-tmp-dir=path            Where to store session (textfiles)
                                   files (default: /tmp/luaflare-sessions-XXXXXX)
 --disable-expects                 Disable type checking for performance.
+--socket-backend=string           The backend to use for sockets (default is
+                                  "luasocket").
+--escape-html-warn-buckets=number Warn when this many buckets exist for escaping
+                                  HTML strings (default 1024).
 ]])
 end
-
 -- so we can exit ASAP, for bash completion speedy-ness
 if arg[1] == "--help" then return usage() end
+
+-- try to bootstrap
+do -- for require() to check modules path
+	local tp, tcp = package.path, package.cpath
+	
+	local path = os.getenv("LUAFLARE_LIB_DIR") or arg[0]:match("(.+)/") or "."
+	
+	package.path = path .. "/libs/?.lua;" .. tp
+	package.cpath = path .. "/libs/?.so;" .. tcp
+	
+	local bootstrap, err = loadfile(path.."/bootstrap/bootstrap.lua")
+	if not bootstrap then
+		io.stderr:write("failed to bootstrap: "..tostring(err).."\n")
+		os.exit(1)
+	end
+	bootstrap{path=path}
+end
+
+local luaflare = require("luaflare")
 
 local socket = require("socket")
 local posix = require("posix")
@@ -89,99 +93,32 @@ script.parse_arguments(arg, shorthands)
 
 include(luaflare.lib_path.."/inc/request.lua")
 include(luaflare.lib_path.."/inc/response.lua")
+
+do
+	local main = require("luaflare.main")
+	local action = script.arguments[1]
 	
-local port = tonumber(script.options.port) or 8080
-local threads = tonumber(script.options.threads) or 2 -- how many threads to create
-local host = script.options["local"] and "localhost" or "*"
-local keepalive_time = tonumber(script.options["keepalive-time"]) or 65
-host = script.options["host"] or host
-
-function handle_client(client)
-	local time = util.time()
-	while (util.time() - time) <= keepalive_time do -- give them until the specified time limit
-		local request, err = Request(client)
-		if not request and err then warn(err) return end
-		if not request then return end -- probably a keep-alive connection timing out
-		
-		print(request:peer()  .. " " .. request:method()  .. " " .. request:url())
-		
-		local response = Response(request)
-			hook.safe_call("Request", request, response) -- okay, lets invoke whatever is hooked
-		
-		if request:is_upgraded() then return true end -- don't close the connection!!!
-		response:send()
-		
-		if not request:headers().Connection 
-		or not request:headers().Connection:lower():match("keep%-alive") 
-		then -- break if the connection is not being kept alive
-			break
-		end
-	end
-end
-
-function main()
 	if script.options["unit-test"] then
-		include(luaflare.lib_path .. "/inc/unittests.lua")
-		return unit_test()
+		action = "unit-test"
 	elseif script.options.version then
 		return print(string.format("%s (%s)", luaflare._VERSION, _VERSION))
 	elseif script.options.help then
 		return usage()
+	elseif not action then
+		return
 	end
 	
-	if script.arguments[1] == "listen" then
-		local thread_mdl = script.options["threads-model"] or "coroutine"
-		dofile(string.format("%s/inc/threads_%s.lua", luaflare.lib_path, thread_mdl))
+	local escp_action = action:gsub("%-", "_")
 	
-		dofile(luaflare.lib_path .. "/inc/autorun.lua")
-		assert(main_loop, "`main_loop()` is not defined!")
-	
-		main_loop()
-	elseif script.arguments[1] == "mount" then
-		local dir = script.arguments[2]
-		local name = script.arguments[3]
-		if not dir then print("error: expected PATH") return usage() end
-		if not name then print("error: expected NAME") return usage() end
-		
-		name = luaflare.config_path .. "/sites/" .. name
-		
-		local user = posix.getlogin()
-		if posix.getgroup(user) == nil then
-			print("error: failed to set group of mounted directory: user " .. user .. " does not have a group by the same name")
-			return os.exit(1)
-		end
-		
-		print(string.format("mounting %s at %s", dir, name))
-		print("creating link")
-		if os.execute(string.format("ln -s \"`pwd`/%s\" \"%s\"", escape.argument(dir), escape.argument(name))) ~= 0 then
-			return os.exit(1)
-		end
-		print("setting group; ensure your user is in the group " .. user .. " via:")
-		print("sudo usermod -a -G \"" .. user .. "\" \"`whoami`\"")
-		if os.execute(string.format("sudo chgrp -R \"%s\" \"%s\"", escape.argument(user), escape.argument(name))) ~= 0 then
-			return os.exit(1)
-		end
-		
-		print("okay")
-		return
-	elseif script.arguments[1] == "unmount" then
-		local name = script.arguments[2]
-		if not name then print("error: expected NAME") return usage() end
-		
-		name = luaflare.config_path .. "/sites/" .. name
-		
-		print(string.format("unmounting %s", name))
-		if os.execute(string.format("rm -r \"%s\"", escape.argument(name))) ~= 0 then
-			return os.exit(1)
-		end
-		
-		print("okay")
-		return
-	elseif script.arguments[1] then
-		print("unknown action " .. script.arguments[1])
+	if not main.actions[escp_action] then
+		io.stderr:write(string.format("error: unknown action: %s\n", action))
+		os.exit(1)
 	end
+	
+	local args = {}
+	for i = 2, #script.arguments do
+		table.insert(args, script.arguments[i])
+	end
+	
+	main.actions[escp_action](table.unpack(args))
 end
-
-
-
-main()

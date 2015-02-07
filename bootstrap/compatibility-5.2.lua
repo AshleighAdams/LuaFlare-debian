@@ -11,6 +11,7 @@ local parser = require("luaflare.util.luaparser")
 lua53_bitand = assert(bit32.band)
 lua53_bitor = assert(bit32.bor)
 lua53_bitxor = assert(bit32.bxor)
+lua53_bitnot = assert(bit32.bnot)
 lua53_bitlshift = assert(bit32.lshift)
 lua53_bitrshift = assert(bit32.rshift)
 lua53_idiv = function(a, b)
@@ -21,109 +22,171 @@ end
 local new_ops_func_map = {
 	["&"]  = "lua53_bitand",
 	["|"]  = "lua53_bitor",
-	["~"]  = "lua53_bitxor",
 	["<<"] = "lua53_bitlshift",
 	[">>"] = "lua53_bitrshift",
 	["//"] = "lua53_idiv"
 }
 
---[[
-local function prev_value(tokens, k, precedence)
-	if type(precedence) == "string" then
-		precedence = assert(parser.operator_precedence[precedence])
-	end
-	
-	local depth = 0, tk
-	while true do
-		tk, k = parser.previous_token(tokens, k, 1)
-		
-		if tk.type == "token" and parser.brackets_create[tk.value] then
-			depth = depth + 1
+local new_unops_func_map = {
+	["~"]  = "lua53_bitnot"
+}
+
+-- TODO: the precedence on these is not perfect, but it's sort of okay (does not currently work with unary operators)
+local function add_53_unoperators(tokens)
+	for k,v in pairs(tokens) do
+		if v.type == "token" and new_unops_func_map[v.value] then
+			-- read right until we can't anymore, then place brackets around with func call
+			local replacement_func = new_unops_func_map[v.value]
 			
-			-- check for identifiers
-			local prv, pk = parser.previous_token(tokens, k, 1)
-			
-			if prv.type == "identifier" then
-				tk, k = prv, pk
+			local depth, nn = 0, k
+			while true do
+				local t, n = parser.next_token(tokens, nn, 1)
+				if t.type == "token" then
+					if t.value == ":" or t.value == "." then
+						-- ignore these
+					else -- depth here will go < 0
+						local depthchanged = false
+						if parser.brackets_create[t.value] then
+							depth  = depth + 1
+							depthchanged = true
+						end
+						if parser.brackets_destroy[t.value] then
+							depth = depth - 1
+							depthchanged = true
+						end
+						
+						-- if we were located in brackets, exit
+						-- if other_precedence is set, this is a math operation (usually)
+						local other_precedence = parser.operator_precedence[t.value]
+						
+						if depth < 0 then
+							break
+						elseif depth == 0 and other_precedence then
+							break
+						elseif depth == 0 and not depthchanged then -- end of statement
+							break
+						end
+					end
+				elseif depth == 0 and t.type == "keyword" then
+					break
+				end
+				
+				nn = n
 			end
-		end
-		if tk.type == "token" and parser.brackets_destroy[tk.value] then
-			depth = depth - 1
-		end
-		
-		local prv, pk = parser.previous_token(tokens, k, 1)
-		-- -(a) << b == (-(a)) << b
-		if depth == 0 then
-			break
+			
+			v.type = "identifier"
+			v.value = replacement_func
+			v.chunk = replacement_func
+			table.insert(tokens, nn + 1, {type = "token", value = ")", chunk = ")"})
+			table.insert(tokens,  k + 1, {type = "token", value = "(", chunk = "("})
 		end
 	end
 end
+hook.add("ModifyTokens", "5.2 -> 5.3: new operators (unary)", add_53_unoperators, -0.5)
 
-local function add_53_bitshift(tokens)
-	for k,v in pairs(tokens) do
-		if v.type == "token" and (v.value == "<<" or v.value == ">>") then
-			
-		end
-	end
-end]]
-
-local okay_token_types = {
-	identifier = true,
-	number = true,
-	string = true
-}
-local new_ops_func_map = {
-	["&"]  = "lua53_bitand",
-	["|"]  = "lua53_bitor",
-	["~"]  = "lua53_bitxor",
-	["<<"] = "lua53_bitlshift",
-	[">>"] = "lua53_bitrshift",
-	["//"] = "lua53_idiv"
-}
-
--- not 100% complete, (5) | b won't work
--- TODO
 local function add_53_operators(tokens)
 	for k,v in pairs(tokens) do
 		if v.type == "token" and new_ops_func_map[v.value] then
 			-- this opperator is new in 5.3
 			local replacement_func = new_ops_func_map[v.value]
+			local precedence = parser.operator_precedence[v.value]
 			
-			local pt, pn = parser.previous_token(tokens, k, 1)
-			local nt, nn = parser.next_token(tokens, k, 1)
-			
-			if okay_token_types[pt.type] and okay_token_types[nt.type] then
-				table.insert(tokens, nn + 1, {type = "token", value = ")", chunk = ")"})
-				table.insert(tokens, pn    , {type = "token", value = "(", chunk = "("})
-				table.insert(tokens, pn    , {type = "identifier", value = replacement_func, chunk = replacement_func})
-				v.value = ","
-				v.chunk = ","
+			if not precedence then
+				parser.problem("no operator precedence for " .. v.value)
+				break
 			end
+			
+			--local pt, pn = parser.previous_token(tokens, k, 1)
+			--local nt, nn = parser.next_token(tokens, k, 1)
+			
+			local pt, pn = nil, k
+			local nt, nn = nil, k
+			local depth
+			
+			depth = 0
+			while true do
+				local t, n = parser.previous_token(tokens, pn, 1)
+				
+				if t.type == "token" then
+					if t.value == ":" or t.value == "." then
+						-- ignore these
+					else -- depth here will go < 0
+						local depthchanged = false
+						if parser.brackets_create[t.value] then
+							depth  = depth + 1
+							depthchanged = true
+						end
+						if parser.brackets_destroy[t.value] then
+							depth = depth - 1
+							depthchanged = true
+						end
+						
+						-- if we were located in brackets, exit
+						-- if other_precedence is set, this is a math operation (usually)
+						local other_precedence = parser.operator_precedence[t.value]
+						
+						if depth > 0 then
+							break
+						elseif depth == 0 and other_precedence then
+							if other_precedence < precedence then
+								break
+							end
+						elseif depth == 0 and not depthchanged then -- end of statement
+							break
+						end
+					end
+				elseif depth == 0 and t.type == "keyword" then
+					break
+				end
+				
+				pn = n
+			end
+			
+			depth = 0
+			while true do
+				local t, n = parser.next_token(tokens, nn, 1)
+				
+				if t.type == "token" then
+					if t.value == ":" or t.value == "." then
+						-- ignore these
+					else -- depth here will go < 0
+						local depthchanged = false
+						if parser.brackets_create[t.value] then
+							depth  = depth + 1
+							depthchanged = true
+						end
+						if parser.brackets_destroy[t.value] then
+							depth = depth - 1
+							depthchanged = true
+						end
+						
+						-- if we were located in brackets, exit
+						local other_precedence = parser.operator_precedence[t.value]
+						
+						if depth < 0 then
+							break
+						elseif depth == 0 and other_precedence then
+							if other_precedence < precedence then
+								break
+							end
+						elseif depth == 0 and not depthchanged then -- end of statement
+							break
+						end
+					end
+				elseif depth == 0 and t.type == "keyword" then
+					break
+				end
+				
+				nn = n
+			end
+			
+			table.insert(tokens, nn + 1, {type = "token", value = ")", chunk = ")"})
+			table.insert(tokens, pn    , {type = "token", value = "(", chunk = "("})
+			table.insert(tokens, pn    , {type = "identifier", value = replacement_func, chunk = replacement_func})
+			v.value = ","
+			v.chunk = ","
 		end
 	end
 end
 hook.add("ModifyTokens", "5.2 -> 5.3: new operators", add_53_operators)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

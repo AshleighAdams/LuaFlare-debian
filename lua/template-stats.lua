@@ -1,158 +1,160 @@
 local tags = require("luaflare.tags")
+local templator = require("luaflare.templator")
 local scheduler = require("luaflare.scheduler")
 local script = require("luaflare.util.script")
 local hook = require("luaflare.hook")
 local slug = require("luaflare.util.slug")
+local util = require("luaflare.util")
 
 local template = {}
 template.barwidth = 1;
 template.graphwidth = 800;
 template.bars = template.graphwidth / template.barwidth
 
-function template.make(req, res, contents, info)
-	tags.html
+local script = [[
+google.load("visualization", "1", {packages:["corechart"]});
+google.setOnLoadCallback(draw_chart);
+
+function update_chart(url, id, max)
+{
+	$.get(url, function(rawdata)
 	{
-		tags.head
-		{
-			tags.title { "LuaFlare Statistics" },
-			tags.script { src = "//www.google.com/jsapi" },
-			tags.script { src = "//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js" },
-			tags.script { src = "/stats/jquery.csv-0.71.min.js" },
-			tags.script
-			{
-				[[
-				google.load("visualization", "1", {packages:["corechart"]});
-				google.setOnLoadCallback(draw_chart);
-				
-				function update_chart(url, id, max)
-				{
-					$.get(url, function(rawdata)
-					{
-						var array_data = $.csv.toArrays(rawdata, {onParseValue: $.csv.hooks.castToScalar});
-						var data = new google.visualization.arrayToDataTable(array_data);
-						
-						var view = new google.visualization.DataView(data);
-						view.setColumns([{
-							type: 'datetime',
-							label: 'time',
-							calc: function (dt, row) {
-								var ret = new Date(dt.getValue(row, 0)*1000);
-								return {v:ret, f: ret.toString()};
-							}
-						},1]);
-						
-						var options = {
-							title: "",
-							vAxis: {title: data.getColumnLabel(1), viewWindow: {min: 0}, minValue: 0, maxValue: max},
-							hAxis: {format: "HH:mm"},
-							legend: "none",
-							curveType: "function",
-							lineWidth: 0,
-						};
-						
-						var chart = new google.visualization.AreaChart(document.getElementById(id));
-						chart.draw(view, options);
-					})
-				}
-				
-				function draw_chart()
-				{
-					update_chart("/stats/hits.csv", "graph-hits", ]]..info.hits_max..[[);
-					update_chart("/stats/load.csv", "graph-load", ]]..info.load_max..[[);
-					update_chart("/stats/mem.csv", "graph-mem", ]]..info.memory_max..[[);
-					]]..(req:params().update and "setTimeout(draw_chart, 1000 * 60)" or "")..[[
-				}
-				]]
-			},
-			tags.style
-			{
-[[				main
-				{
-					margin: 0 auto;
-					width: 800px;
-					display:block;
-				}
-				div.graph
-				{
-					background-color: #eee;
-					width: ]]..template.graphwidth..[[px;
-					height: 100px;
-					font-size: 0;
-					vertical-align: top;
-					overflow-y: hidden;
-				}
-				div.bar
-				{
-					height: 100%;
-					width: ]]..template.barwidth..[[px;
-					background-color: rgba(0,0,255, 0.1);
-					border-top: 1px solid blue;
-					display: inline-block;
-					vertical-align: bottom;
-				}
-				
-				@-webkit-keyframes flashred {
-					0%   {background-color: rgba(255,0,0, 0.5);}
-					100%  {background-color: rgba(255,0,0, 0.1);}
-				}
-				@keyframes flashred {
-					0%   {background-color: rgba(255,0,0, 0.5);}
-					100%  {background-color: rgba(255,0,0, 0.1);}
-				}
-				
-				div.overflowbar
-				{
-					background-color: rgba(255,0,0, 0.1);
-					border-top-color: red;
-					
-					-webkit-animation: flashred 1s infinite alternate;
-					animation: flashred 1s infinite alternate;
-				}
-				td
-				{
-					padding-right: 15px;
-					padding-left: 15px;
-				}
-				div.warning
-				{
-					background-color: #eee;
-					font-family: monospace;
-					overflow-x: auto;
-					white-space: nowrap;
-					height: auto;
-					line-height:1em;
-					max-height: 7em;
-				}
-				div.log
-				{
-					font-family: monospace;
-				}
-				footer
-				{
-					text-align: center;
-					font-size: 0.75em;
-					font-family: monospace;
-					color: gray;
-				}
-				a
-				{
-					text-decoration: none;
-					color: inherit;
-				}]]
+		var array_data = $.csv.toArrays(rawdata, {onParseValue: $.csv.hooks.castToScalar});
+		var data = new google.visualization.arrayToDataTable(array_data);
+		
+		var view = new google.visualization.DataView(data);
+		view.setColumns([{
+			type: 'datetime',
+			label: 'time',
+			calc: function (dt, row) {
+				var ret = new Date(dt.getValue(row, 0)*1000);
+				return {v:ret, f: ret.toString()};
 			}
+		},1]);
+		
+		var options = {
+			title: "",
+			vAxis: {title: data.getColumnLabel(1), viewWindow: {min: 0}, minValue: 0, maxValue: max},
+			hAxis: {format: "HH:mm"},
+			legend: "none",
+			curveType: "function",
+			lineWidth: 0,
+		};
+		
+		var chart = new google.visualization.AreaChart(document.getElementById(id));
+		chart.draw(view, options);
+	})
+}
+
+function draw_chart()
+{
+	update_chart("/stats/hits.csv", "graph-hits", $(info_hits_max));
+	update_chart("/stats/load.csv", "graph-load", $(info_load_max));
+	update_chart("/stats/mem.csv", "graph-mem", $(info_mem_max));
+	$(timeout, none)
+}
+]]
+
+local css = [[
+main
+{
+	margin: 0 auto;
+	width: 800px;
+	display:block;
+}
+td
+{
+	padding-right: 15px;
+	padding-left: 15px;
+}
+div.warning
+{
+	background-color: #eee;
+	font-family: monospace;
+	overflow-x: auto;
+	white-space: nowrap;
+	height: auto;
+	line-height:1em;
+	max-height: 7em;
+}
+div.log
+{
+	font-family: monospace;
+}
+footer
+{
+	text-align: center;
+	font-size: 0.75em;
+	font-family: monospace;
+	color: gray;
+}
+a
+{
+	text-decoration: none;
+	color: inherit;
+}
+]]
+
+local root_html = tags.html
+{
+	tags.head
+	{
+		tags.title { "$(title)" },
+		tags.script { src = "//www.google.com/jsapi" },
+		tags.script { src = "//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js" },
+		tags.script { src = "/stats/jquery.csv-0.71.min.js" },
+		tags.script
+		{
+			script
 		},
-		tags.body
+		tags.style
 		{
-			tags.main
-			{
-				unpack(contents)
-			},
-			tags.footer
-			{
-				"Instance: " .. script.instance()
-			}
+			css
 		}
-	}.to_response(res)
+	},
+	tags.body
+	{
+		tags.main
+		{
+			"$(contents, none)"
+		},
+		tags.footer
+		{
+			"Instance: $(instance)"
+		}
+	}
+}.to_html()
+local root_generator = templator.generate(root_html)
+
+function template.make(req, res, contents, info)
+	if type(contents) == "table" then
+		local buff = {}
+		for k,v in ipairs(contents) do
+			if type(v) == "table" and v.to_html then
+				table.insert(buff, v.to_html())
+			elseif type(v) == "table" then
+				table.insert(buff, tags.div{ v }.to_html())
+			else
+				table.insert(buff, v)
+			end
+		end
+		contents = table.concat(buff)
+	end
+	
+	res:append(root_generator {
+		title = "LuaFlare Statistics",
+		instance = "n/a",
+		contents = contents,
+		
+		info_hits_max = info.hits_max or 0,
+		info_load_max = info.load_max or 0,
+		info_mem_max = info.memory_max or 0,
+		timeout = req:params().update and "setTimeout(draw_chart, 1000 * 60)" or ""
+	})
+end
+
+function template.make_simple(req, res, contents)
+	return template.make(req, res, contents, {})
 end
 
 function template.google_graph(title, id)
@@ -199,14 +201,13 @@ function template.graph(title, units, data, argmax)
 	}
 end
 
+local section_gen = templator.generate[[
+<a href = "#$(id)" id="$(id)"><h1>$(name)</h1></a>
+]]
 function template.section(name)
-	local id = slug.generate(name)
-	return tags.a { href = "#"..id, id = id }
-	{
-		tags.h1
-		{
-			name
-		}
+	return section_gen {
+		id = slug.generate(name),
+		name = name
 	}
 end
 
@@ -261,6 +262,7 @@ function template.package_info()
 		else
 			version = tags.i{"Unknown"}
 		end
+		
 		local location = package.searchpath(name, package.path) or package.searchpath(name, package.cpath) or tags.i{"Unknown"}
 		
 		table.insert(rows, {name, version, location})
@@ -270,6 +272,11 @@ function template.package_info()
 	table.sort(rows, function(a,b)
 		return a[1] < b[1]
 	end)
+	
+	for n = 1, #rows do
+		local name = rows[n][1]
+		rows[n][1] = tags.a { href = "stats/module/" .. name } { name }
+	end
 	
 	table.insert(rows, 1, { tags.b{"Name"}, tags.b{"Version"}, tags.b{"Location"} })
 	return template.table(rows)
@@ -315,11 +322,26 @@ end
 
 function template.hook_info()
 	local rows = {
-		{ tags.b{"Hook"}, tags.b{"Priority"}, tags.b{"Name"} }
+		{ tags.b{"Hook"}, tags.b{"Priority"}, tags.b{"Name"}, tags.b{"Performance (calls = c)"} }
 	}
 	
-	for k,v in pairs(hook.hooks) do	
-		table.insert(rows, { tags.b{tostring(k)} })
+	local t, c = 0, 0
+	
+	for k,v in pairs(hook.hooks) do
+		t = t + v.time
+		c = c + v.calls
+	end
+	
+	for k,v in pairs(hook.hooks) do
+		local msc = v.calls == 0 and 0 or ( v.time / v.calls * 1000.0 )
+		
+		table.insert(rows, { 
+			tags.b{tostring(k)},
+			"",
+			"",
+			string.format("%.2f%% %.2fs %dc %.1fms/call", v.time / t * 100.0, v.time, v.calls, msc)
+		})
+		
 		for kk,vv in ipairs(v.callorder) do
 			table.insert(rows, { "", tostring(vv.priority), tostring(vv.name) })
 		end

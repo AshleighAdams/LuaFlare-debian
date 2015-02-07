@@ -223,29 +223,77 @@ See `thirdparty/luaflare.nginx.(pre|post)`
 and `thirdparty/luaflare.apache.(pre|post)`
 for the sites themselves (pre and post configure).
 
-# To Do
-<!--- U+2610 (☐, 'BALLOT BOX'), U+2611 (☑, 'BALLOT BOX WITH CHECK'), and U+2612 (☒, 'BALLOT BOX WITH X') --->
+# Templating Concept
 
-- [x] Cookie Support
-- [x] Session library
-	- [x] Allow overriding where sessions are stored
-		- Implimented via the hook `GetSession`.
-- [ ] Global table support for sessions
-- [ ] Rewrite template generate_html to be cleaner & easier to follow
-- [x] Add the additional command --help
-- [x] Add the additional command --version
--     Remove other threading methods, only keep coroutines
-- [x] Apache site installer for acting as a reverse proxy.
-- [x] Possibly remove SSL support:
-	- Should it be provided by the reverse proxy?
-	Could the reverse proxy ever be on a different machine, thus unsafe to
-	transmit data?
-- [ ] If a main thread dies, CPU usage goes to full.  Fix this.
+```lua
+$$ = $
+$(arg, escaper) = escape[escaper](arg)
+$(arg) = $(arg, html)
 
-To look at:
+-- these also can be generated with the tags library
+local body_html = [[
+<html>
+	<head>
+		<title>$(title)</title>
+	</head>
+	<body>
+		$(contents, none)
+	</body>
+</html>
+]]
 
-- inc/request.lua:`read_headers()`: should continuations of headers insert a space, newline, or nothing?
-	- `ret[lastheader] = ret[lastheader] .. " " .. val:trim()`
+local content_html = [[
+<h1>Hello, $(url)!</h1>
+<p>You requested $(url)</p>
+]]
+
+local body = templator.generate(body_html)
+local content = templator.generate(content_html)
+
+function test(req, res)
+	local html = body {
+		title = req:path(),
+		contents = content {
+			url = req:path()
+		}
+	}
+	res:append(html)
+end
+host.any:add("/test", test)
+```
+
+using tags
+
+```lua
+local body_html = tags.html
+{
+	tags.head
+	{
+		tags.title { "$(title)" }
+	},
+	tags.body
+	{
+		"$(contents, none)"
+	}
+}.to_string()
+
+local content_html = tags.div
+{
+	tags.h1 { "Hello, $(url)" },
+	tags.p { "You requested $(url)" }
+}.to_string()
+```
+
+if on a new line, with only whitespace preceding the var, then the precending whitespace
+shall be prefixed onto all newlines in the variable
+
+# Host
+
+static over pattern?
+
+For example, the exact resource `/path/file.ext` exists, but a pattern for
+`/path/(*)` exists and will be matched; should we allow the exact match to
+overrule pattern matching?
 
 # Packaging concept
 
@@ -263,3 +311,11 @@ To look at:
 		Depends: luaflare, systemd | sysvinit | upstart
 
 You can see this packaging concept implimented here: https://github.com/KateAdams/LuaFlare-debian/
+
+# New CLI Options
+
+When a new command line option is added, make sure you update the following files to match:
+
+ - thirdparty/docs/command-line-arguments.md
+ - thirdparty/docs/luaflare.1
+ - luaflare.lua

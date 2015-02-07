@@ -2,6 +2,7 @@ local session = {}
 
 local luaflare = require("luaflare")
 local script = require("luaflare.util.script")
+local hook = require("luaflare.hook")
 
 local posix = require("posix")
 local meta = {}
@@ -33,7 +34,7 @@ local function set_session_path()
 	
 	print("textfile session path: " .. session_path)
 end
-hook.add("Loaded", "textfile session path", set_session_path)
+hook.add("Load", "textfile session path", set_session_path)
 
 session.valid_chars = "AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789"
 session.valid_pattern = string.format("^[%s]+$", session.valid_chars)
