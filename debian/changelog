@@ -19,7 +19,7 @@ luaflare (2.8) unstable; urgency=low
 
  -- Kate Adams <self@kateadams.eu>  Sat, 07 Feb 2015 03:45:12 +0000
 
- luaflare (2.7) unstable; urgency=low
+luaflare (2.7) unstable; urgency=low
 
   * More explicit bootstrapping of Lua to LuaFlare's flavour of Lua.
   * Circular requires are automatically resolved.
