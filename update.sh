@@ -35,7 +35,7 @@ if [[ $CHANGELOG_VERSION != $VERSION ]]; then
 		cp thirdparty/luaflare.systemd.post debian/luaflare-service.luaflare.service
 		cp thirdparty/luaflare.sysvinit.post debian/luaflare-service.luaflare.init
 		cp thirdparty/luaflare.upstart.post debian/luaflare-service.luaflare.upstart
-		make clean
+		#make clean
 
 		echo "updating changelog..."
 		dch --newversion="$VERSION" --urgency low

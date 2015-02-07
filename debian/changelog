@@ -1,4 +1,25 @@
-luaflare (2.7) UNRELEASED; urgency=low
+luaflare (2.8) unstable; urgency=low
+
+  * Added /stats/module/*.
+  * Added hook performance counter.
+  * Added luaflare.socket module (replaces all socket use inside LuaFlare).
+  * Type checking speed improvments.
+  * Added luaflare.templator module.
+  * Added luaflare.profiler module.
+  * Improved the speed of escape.html() by aprox. 2 orders of magnitude.
+  * Improved the speed of the Lua lexer.
+  * Added scheduler.sleep().
+  * More closely follows RFC2616 and RFC7231.
+  * Removed SSL support.
+  * Fixed 5.3 binary operators precedence.
+  * Renamed request:url() to request:path().
+  * Modularized the main loop system.
+  * Renamed Loaded hook to Load.
+  * Added Unload hook.
+
+ -- Kate Adams <self@kateadams.eu>  Sat, 07 Feb 2015 03:45:12 +0000
+
+ luaflare (2.7) unstable; urgency=low
 
   * More explicit bootstrapping of Lua to LuaFlare's flavour of Lua.
   * Circular requires are automatically resolved.
